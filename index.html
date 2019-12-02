@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+        <meta charset="UTF-8">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <title>Document</title>
+    </head>
+    <body>
+        <div class="container">
+            <form action="" method="post" id="form">
+                <label for="textarea">Ecrire quelque chose</label>
+                <textarea name="textarea" id="textarea" cols="30" rows="10"></textarea>
+
+                <div class="row" id="row-cards"></div>
+
+                <button class="btn btn-primary">Envoyer</button>
+            </form>
+        </div>
+
+        <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js" integrity="sha256-4iQZ6BVL4qNKlQ27TExEhBN1HFPvAvAMbFavKKosSWQ=" crossorigin="anonymous"></script>
+        <script src="https://cdn.ckeditor.com/4.13.0/standard/ckeditor.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/js/all.min.js"></script>
+        <script>
+            let files = {};
+
+            function displayImage(imgBlob, id) {
+                let container = document.getElementById("row-cards");
+                let col = document.createElement('div');
+                col.className = 'col-4 col-capture';
+                col.id = id;
+                let canvas = document.createElement('canvas');
+                canvas.className = "align-middle p-1";
+                canvas.height = 100;
+                canvas.width = 100;
+                let infos = document.createElement('span');
+                infos.innerText = `Image ${(Object.keys(files).length)} - ${moment(imgBlob.lastModified).format('HH:mm:ss')}`;
+                let button = document.createElement('button');
+                button.className = "btn btn-sm btn-danger btn-delete-image mx-1";
+                button.type = 'button';
+                button.innerHTML = '<i class="fas fa-fw fa-trash"></i>';
+
+                col.append(canvas);
+                col.append(infos);
+                col.append(button);
+                container.append(col);
+
+                let img = new Image();
+                img.onload = function () {
+                    let scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+                    // get the top left position of the image
+                    let x = (canvas.width / 2) - (img.width / 2) * scale;
+                    let y = (canvas.height / 2) - (img.height / 2) * scale;
+                    canvas.getContext('2d').drawImage(img, x, y, img.width * scale, img.height * scale);
+                };
+
+                // Crossbrowser support for URL
+                let URLObj = window.URL || window.webkitURL;
+
+                // Creates a DOMString containing a URL representing the object given in the parameter
+                img.src = URLObj.createObjectURL(imgBlob);
+            }
+
+            window.addEventListener("paste", e => {
+                if (!e.clipboardData) return;
+
+                let items = e.clipboardData.items;
+
+                if (!items) return;
+
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].type.indexOf("image") !== -1) {
+                        let imgBlob = items[i].getAsFile();
+                        let uuid = (new Date()).getTime();
+
+                        files[uuid] = imgBlob;
+                        displayImage(imgBlob, uuid);
+                    } else if (items[i].type.indexOf("text") !== -1) {
+                        // ToDo Faire un truc avec le texte;
+                        console.log(e.clipboardData.getData(items[i].type));
+                        items[i].getAsString(e => {
+                            console.log(e)
+                        })
+                    }
+                }
+
+                console.log(files);
+            });
+
+            $(document)
+                .ready(() => {
+                    CKEDITOR.replace('textarea');
+
+                    CKEDITOR.instances['textarea'].on('paste', e => {
+                        let items = e.data.dataTransfer._.files;
+
+                        for (let i = 0; i < items.length; i++) {
+                            if (items[i].type.indexOf("image") !== -1) {
+                                let imgBlob = items[i];
+
+                                let uuid = (new Date()).getTime();
+                                files[uuid] = imgBlob;
+                                displayImage(imgBlob, uuid);
+
+                                e.editor.insertHtml(`<a href="?image=${uuid}">[Voir l'image ${Object.keys(files).length}]</a>`);
+                            }
+                        }
+                        console.log(files);
+                    });
+                })
+
+                .on('click', '.btn-delete-image', e => {
+                    let el = e.currentTarget;
+                    let col = $(el).closest('.col-capture');
+                    let id = col[0].id;
+
+                    delete files[id];
+
+                    let link = CKEDITOR.instances['textarea'].editable().findOne(`a[href="?image=${id}"]`);
+
+                    if(link){
+                        link.remove();
+                    }
+
+                    col.remove();
+                })
+
+                .on('submit', '#form', e => {
+                    e.preventDefault();
+
+                    let formData = new FormData();
+
+                    formData.append('textarea', CKEDITOR.instances['textarea'].getData());
+
+                    for (const id in files) {
+                        if( files.hasOwnProperty( id ) ) {
+                            formData.append(`file[${id}]`, files[id]);
+                        }
+                    }
+
+                    fetch("files_post.php", {
+                        body: formData,
+                        method: "post"
+                    }).then(res => {
+                        console.log(res);
+                        return res.toString();
+                    }).then(res => {
+                        console.log(res);
+                    });
+                })
+        </script>
+    </body>
+</html>
+
